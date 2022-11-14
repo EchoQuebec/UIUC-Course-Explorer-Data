@@ -83,7 +83,7 @@ for year in sch_xml.find("calendarYears"):
                         print("Section get error \'" + url_parser(section.get('href')) + "\' -- " + str(e))
                         continue
                     with open(cou_dir + '/' + str(section.get('id')) + ".xml", 'wb') as output:
-                        print("doing section " + str(section.get('id')) + " at " + 'schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id + '/sections/' + str(section.get('id')) + ".xml")
+                        print("doing section " + str(section.get('id')) + " at " + cou_dir + '/' + str(section.get('id')) + ".xml")
                         output.write(sec_response.content)
                         output.close()
 
