@@ -28,7 +28,8 @@ for year in sch_xml.find("calendarYears"):
         continue
     yrs_id = yrs_xml.get('id')
     os.mkdir('schedule/' + yrs_id)
-    with open("schedule/" + yrs_id + '/' + yrs_id + ".xml", 'wb') as yrs_out:
+    yrs_dir = "schedule/" + yrs_id
+    with open(yrs_dir + ".xml", 'wb') as yrs_out:
         yrs_out.write(yrs_response.content)
         yrs_out.close()
     for sem in yrs_xml.find('terms'):
@@ -40,8 +41,9 @@ for year in sch_xml.find("calendarYears"):
             print("Sem get error " + url_parser(sem.get('href')) + ": " + str(e))
             continue
         sem_id = sem_xml.find('label').text.lower().split()[0]
-        os.mkdir('schedule/' + yrs_id + '/' + sem_id)
-        with open('schedule/' + yrs_id + '/' + sem_id + '/' + sem_id + ".xml", "wb") as sem_out:
+        sem_dir = yrs_dir + "/" + sem_id
+        os.mkdir(sem_dir)
+        with open(sem_dir + ".xml", "wb") as sem_out:
             sem_out.write(sem_response.content)
             sem_out.close()
         for subject in sem_xml.find("subjects"):
@@ -53,8 +55,9 @@ for year in sch_xml.find("calendarYears"):
                 print("Subject get error " + url_parser(subject.get('href')) + ": " + str(e))
                 continue
             sub_id = sub_xml.get('id')
-            os.mkdir('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id)
-            with open('schedule/' + yrs_id + '/' + sem_id +  "/" + sub_id + "/" + sub_id + ".xml", 'wb') as sub_out:
+            sub_dir = sem_dir + '/' + sub_id
+            os.mkdir(sub_dir)
+            with open(sub_dir + ".xml", 'wb') as sub_out:
                 sub_out.write(sub_response.content)
                 sub_out.close()
             for course in sub_xml.find("courses"):
@@ -65,10 +68,11 @@ for year in sch_xml.find("calendarYears"):
                     error_list.append("Course get error \'" + url_parser(course.get('href')) + "\' -- " + str(e))
                     print("Course get error " + url_parser(course.get('href')) + ": " + str(e))
                     continue
-                cou_id = cou_xml.get('id').replace(" ", "_")
+                cou_id = cou_xml.get('id').split()[1]
+                cou_dir = sub_dir + '/' + cou_id
                 os.mkdir('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id)
-                os.mkdir('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id + '/sections')
-                with open('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + "/" + cou_id + "/" + cou_id + ".xml", 'wb') as cou_out:
+                #os.mkdir('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id)
+                with open(cou_dir + ".xml", 'wb') as cou_out:
                     cou_out.write(cou_response.content)
                     cou_out.close()
                 for section in cou_xml.find('sections'):
@@ -78,7 +82,7 @@ for year in sch_xml.find("calendarYears"):
                         error_list.append("Section get error " + url_parser(section.get('href')) + ": " + str(e))
                         print("Section get error \'" + url_parser(section.get('href')) + "\' -- " + str(e))
                         continue
-                    with open('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id + '/sections/' + str(section.get('id')) + ".xml", 'wb') as output:
+                    with open(cou_dir + '/' + str(section.get('id')) + ".xml", 'wb') as output:
                         print("doing section " + str(section.get('id')) + " at " + 'schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id + '/sections/' + str(section.get('id')) + ".xml")
                         output.write(sec_response.content)
                         output.close()
