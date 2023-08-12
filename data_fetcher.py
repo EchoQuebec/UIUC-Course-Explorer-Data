@@ -2,13 +2,9 @@ import os
 import xml.etree.ElementTree as ET
 import requests
 from urllib.parse import urlparse
-
-sch_response = requests.get("https://courses.illinois.edu/cisapp/explorer/schedule.xml")
-sch_xml = ET.fromstring(sch_response.content)
+from datetime import datetime
 
 error_list = []
-
-os.mkdir('schedule')
 
 def url_parser(href_url):
     url_path = urlparse(href_url).path
@@ -18,75 +14,91 @@ def url_parser(href_url):
     url_path = url_path.replace("cisapi/", "")
     return url_path
 
-for year in sch_xml.find("calendarYears"):
-    try:
-        yrs_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(year.get('href')))
-        yrs_xml = ET.fromstring(yrs_response.content)
-    except Exception as e:
-        error_list.append("Year get error \'" + url_parser(year.get('href')) + "\' -- " + str(e))
-        print("Year get error " + url_parser(year.get('href')) + ": " + str(e))
-        continue
-    yrs_id = yrs_xml.get('id')
-    os.mkdir('schedule/' + yrs_id)
-    yrs_dir = "schedule/" + yrs_id
-    with open(yrs_dir + ".xml", 'w') as yrs_out:
-        yrs_out.write(yrs_response.content.decode("utf-8").replace("https://courses.illinois.edu/cisapp/explorer/", "").replace("https://courses.illinois.edu/cisapi/", ""))
-        yrs_out.close()
-    for sem in yrs_xml.find('terms'):
+def xml_writer(path:str, response_content:bytes):
+    with open(path + ".xml", "w") as file_out:
+        file_out.write(response_content.decode("utf-8").replace("https://courses.illinois.edu/cisapp/explorer/", "").replace("https://courses.illinois.edu/cisapi/", ""))
+        file_out.close()
+
+# I wanted to do recursive DFS but I can't reliably do it since each layer has unique tags (i.e. sections, courses, subjects, terms, years)
+# But still, here's a functional implementation of iterative DFS
+def section_handler(parent_path, parent_xml:ET.Element):
+    for section in parent_xml.find('sections'):
+        try:
+            sec_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(section.get('href')))
+        except Exception as e:
+            error_list.append(str(int(datetime.now().timestamp())) + ": Section get error " + url_parser(section.get('href')) + ": " + str(e))
+            continue
+        sec_path = parent_path + '/' + str(section.get('id'))
+        xml_writer(sec_path, sec_response.content)
+
+def course_handler(parent_path, parent_xml:ET.Element):
+    for course in parent_xml.find("courses"):
+        try:
+            cou_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(course.get('href')))
+            cou_xml = ET.fromstring(cou_response.content)
+        except Exception as e:
+            error_list.append(str(int(datetime.now().timestamp())) + ": Course get error \'" + url_parser(course.get('href')) + "\' -- " + str(e))
+            continue
+        cou_id = cou_xml.get('id').split()[1]
+        cou_path = parent_path + '/' + cou_id
+        if not os.path.isdir(cou_path):
+            os.mkdir(cou_path)
+        xml_writer(cou_path, cou_response.content)
+        section_handler(cou_path, cou_xml)
+
+def subject_handler(parent_path, parent_xml:ET.Element):
+    for subject in parent_xml.find("subjects"):
+        try:
+            sub_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(subject.get('href')))
+            sub_xml = ET.fromstring(sub_response.content)
+        except Exception as e:
+            error_list.append(str(int(datetime.now().timestamp())) + ": Subject get error \'" + url_parser(subject.get('href')) + "\' -- " + str(e))
+            continue
+        sub_id = sub_xml.get('id')
+        sub_path = parent_path + '/' + sub_id
+        if not os.path.isdir(sub_path):
+            os.mkdir(sub_path)
+        xml_writer(sub_path, sub_response.content)
+        course_handler(sub_path, sub_xml)
+
+def semester_handler(parent_path, parent_xml:ET.Element):
+    for sem in parent_xml.find('terms'):
         try:
             sem_response = requests.get("https://courses.illinois.edu/cisapp/explorer"+ url_parser(sem.get('href')))
             sem_xml = ET.fromstring(sem_response.content)
         except Exception as e:
-            error_list.append("Sem get error \'" + url_parser(sem.get('href')) + "\' -- " + str(e))
-            print("Sem get error " + url_parser(sem.get('href')) + ": " + str(e))
+            error_list.append(str(int(datetime.now().timestamp())) + ": Sem get error \'" + url_parser(sem.get('href')) + "\' -- " + str(e))
             continue
         sem_id = sem_xml.find('label').text.lower().split()[0]
-        sem_dir = yrs_dir + "/" + sem_id
-        os.mkdir(sem_dir)
-        with open(sem_dir + ".xml", "w") as sem_out:
-            sem_out.write(sem_response.content.decode("utf-8").replace("https://courses.illinois.edu/cisapp/explorer/", "").replace("https://courses.illinois.edu/cisapi/", ""))
-            sem_out.close()
-        for subject in sem_xml.find("subjects"):
-            try:
-                sub_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(subject.get('href')))
-                sub_xml = ET.fromstring(sub_response.content)
-            except Exception as e:
-                error_list.append("Subject get error \'" + url_parser(subject.get('href')) + "\' -- " + str(e))
-                print("Subject get error " + url_parser(subject.get('href')) + ": " + str(e))
-                continue
-            sub_id = sub_xml.get('id')
-            sub_dir = sem_dir + '/' + sub_id
-            os.mkdir(sub_dir)
-            with open(sub_dir + ".xml", 'w') as sub_out:
-                sub_out.write(sub_response.content.decode("utf-8").replace("https://courses.illinois.edu/cisapp/explorer/", "").replace("https://courses.illinois.edu/cisapi/", ""))
-                sub_out.close()
-            for course in sub_xml.find("courses"):
-                try:
-                    cou_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(course.get('href')))
-                    cou_xml = ET.fromstring(cou_response.content)
-                except Exception as e:
-                    error_list.append("Course get error \'" + url_parser(course.get('href')) + "\' -- " + str(e))
-                    print("Course get error " + url_parser(course.get('href')) + ": " + str(e))
-                    continue
-                cou_id = cou_xml.get('id').split()[1]
-                cou_dir = sub_dir + '/' + cou_id
-                os.mkdir('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id)
-                #os.mkdir('schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id)
-                with open(cou_dir + ".xml", 'w') as cou_out:
-                    cou_out.write(cou_response.content.decode("utf-8").replace("https://courses.illinois.edu/cisapp/explorer/", "").replace("https://courses.illinois.edu/cisapi/", ""))
-                    cou_out.close()
-                for section in cou_xml.find('sections'):
-                    try:
-                        sec_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(section.get('href')))
-                    except Exception as e:
-                        error_list.append("Section get error " + url_parser(section.get('href')) + ": " + str(e))
-                        print("Section get error \'" + url_parser(section.get('href')) + "\' -- " + str(e))
-                        continue
-                    with open(cou_dir + '/' + str(section.get('id')) + ".xml", 'w') as output:
-                        print("doing section " + str(section.get('id')) + " at " + 'schedule/' + yrs_id + '/' + sem_id + '/' + sub_id + '/' + cou_id + '/sections/' + str(section.get('id')) + ".xml")
-                        output.write(sec_response.content.decode("utf-8").replace("https://courses.illinois.edu/cisapp/explorer/", "").replace("https://courses.illinois.edu/cisapi/", ""))
-                        output.close()
+        sem_path = parent_path + "/" + sem_id
+        if not os.path.isdir(sem_path):
+            os.mkdir(sem_path)
+        xml_writer(sem_path, sem_response.content)
+        subject_handler(sem_path, sem_xml)
 
-with open('error_log.log', 'w', encoding='utf-8') as error_log:
+def year_handler(parent_path, parent_xml:ET.Element):
+    for year in parent_xml.find("calendarYears"):
+        try:
+            yrs_response = requests.get("https://courses.illinois.edu/cisapp/explorer" + url_parser(year.get('href')))
+            yrs_xml = ET.fromstring(yrs_response.content)
+        except Exception as e:
+            error_list.append(str(int(datetime.now().timestamp())) + ": Year get error \'" + url_parser(year.get('href')) + "\' -- " + str(e))
+            continue
+        yrs_id = yrs_xml.get('id')
+        yrs_path = parent_path + "/" + yrs_id
+        if not os.path.isdir(yrs_path):
+            os.mkdir(yrs_path)
+        xml_writer(yrs_path, yrs_response.content)
+        semester_handler(yrs_path, yrs_xml)
+
+
+sch_response = requests.get("https://courses.illinois.edu/cisapp/explorer/schedule.xml")
+sch_xml = ET.fromstring(sch_response.content)
+sch_path = "schedule"
+if not os.path.isdir("schedule"):
+    os.mkdir('schedule')
+
+
+with open('error_log_' + str(int(datetime.now().timestamp())) + ".log", 'w', encoding='utf-8') as error_log:
     error_log.writelines("{}\n".format(error) for error in error_list)
     error_log.close()
